@@ -21,7 +21,7 @@ open class Store<S: State>: ObservableObject {
     @Published public internal(set) var state: S
     
     private let middlewares: [Middleware<S>]
-    private let reducer: Reducer<S>
+    private let reducer: EffectReducer<S>
     
     /// Initializes a new Store with an initial state, a reducer, and optional middlewares.
     /// - Parameters:
@@ -34,7 +34,25 @@ open class Store<S: State>: ObservableObject {
         middlewares: [Middleware<S>] = []
     ) {
         self.state = initialState
-        self.reducer = reducer
+        self.reducer = { state, action in
+            reducer(&state, action)
+            return .none
+        }
+        self.middlewares = middlewares
+    }
+    
+    /// Initializes a new Store with an initial state, an effect reducer, and optional middlewares.
+    /// - Parameters:
+    ///   - initialState: The starting state of the application.
+    ///   - effectReducer: The reducer function to apply action changes and return async work.
+    ///   - middlewares: An array of middlewares that run sequentially on dispatched actions.
+    public init(
+        initialState: S,
+        effectReducer: @escaping EffectReducer<S>,
+        middlewares: [Middleware<S>] = []
+    ) {
+        self.state = initialState
+        self.reducer = effectReducer
         self.middlewares = middlewares
     }
     
@@ -52,11 +70,11 @@ open class Store<S: State>: ObservableObject {
 @MainActor
 private final class DispatchChain<S: State> {
     private let middlewares: [Middleware<S>]
-    private let reducer: Reducer<S>
+    private let reducer: EffectReducer<S>
     private weak var store: Store<S>?
     private var index = 0
     
-    init(store: Store<S>, middlewares: [Middleware<S>], reducer: @escaping Reducer<S>) {
+    init(store: Store<S>, middlewares: [Middleware<S>], reducer: @escaping EffectReducer<S>) {
         self.store = store
         self.middlewares = middlewares
         self.reducer = reducer
@@ -90,10 +108,11 @@ private final class DispatchChain<S: State> {
         } else {
             // Apply reducer
             var currentState = store.state
-            reducer(&currentState, action)
+            let effect = reducer(&currentState, action)
             if currentState != store.state {
                 store.state = currentState
             }
+            effect.start(dispatch: store.dispatch)
         }
     }
 }

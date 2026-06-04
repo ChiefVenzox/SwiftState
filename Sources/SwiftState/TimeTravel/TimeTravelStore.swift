@@ -62,6 +62,26 @@ public final class TimeTravelStore<S: State>: Store<S> {
         super.init(initialState: initialState, reducer: reducer, middlewares: middlewares)
     }
     
+    /// Initializes a new `TimeTravelStore` with an effect reducer.
+    /// - Parameters:
+    ///   - initialState: The initial state of the store.
+    ///   - effectReducer: The reducer function that can return asynchronous work.
+    ///   - middlewares: Any custom middlewares to run before the reducer.
+    ///   - maxHistoryLimit: The maximum number of state transitions to keep in memory. Default is 100.
+    public init(
+        initialState: S,
+        effectReducer: @escaping EffectReducer<S>,
+        middlewares: [Middleware<S>] = [],
+        maxHistoryLimit: Int = 100
+    ) {
+        self.maxHistoryLimit = max(1, maxHistoryLimit)
+        self.history = [initialState]
+        self.actionHistory = []
+        self.currentHistoryIndex = 0
+        
+        super.init(initialState: initialState, effectReducer: effectReducer, middlewares: middlewares)
+    }
+    
     /// Overrides dispatch to capture state transitions after actions are processed.
     public override func dispatch(_ action: Action) {
         let previousState = self.state

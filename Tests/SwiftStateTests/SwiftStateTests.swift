@@ -17,6 +17,7 @@ enum TestAction: Action {
     case increment
     case decrement
     case updateText(String)
+    case loadText(String)
     case noop
 }
 
@@ -31,8 +32,23 @@ let testReducer: Reducer<TestState> = { state, action in
         state.counter -= 1
     case .updateText(let newText):
         state.text = newText
+    case .loadText:
+        break
     case .noop:
         break
+    }
+}
+
+let testEffectReducer: EffectReducer<TestState> = { state, action in
+    guard let action = action as? TestAction else { return .none }
+    switch action {
+    case .loadText(let newText):
+        return .run { dispatch in
+            await dispatch(TestAction.updateText(newText))
+        }
+    default:
+        testReducer(&state, action)
+        return .none
     }
 }
 
@@ -69,6 +85,39 @@ final class SwiftStateTests: XCTestCase {
         XCTAssertEqual(store.state.text, "Bound")
     }
     
+    func testEffectReducerDispatchesAsyncAction() async throws {
+        let store = Store(initialState: TestState(), effectReducer: testEffectReducer)
+        
+        store.dispatch(TestAction.loadText("Async"))
+        XCTAssertEqual(store.state.text, "")
+        
+        try await Task.sleep(nanoseconds: 10_000_000)
+        
+        XCTAssertEqual(store.state.text, "Async")
+    }
+    
+    func testEffectReducerWorksWithMiddleware() async throws {
+        var loggedActions: [String] = []
+        
+        let loggingMiddleware: Middleware<TestState> = { action, getState, dispatch, next in
+            loggedActions.append(String(describing: action))
+            next(action)
+        }
+        
+        let store = Store(
+            initialState: TestState(),
+            effectReducer: testEffectReducer,
+            middlewares: [loggingMiddleware]
+        )
+        
+        store.dispatch(TestAction.loadText("Middleware"))
+        try await Task.sleep(nanoseconds: 10_000_000)
+        
+        XCTAssertEqual(store.state.text, "Middleware")
+        XCTAssertTrue(loggedActions.contains("loadText(\"Middleware\")"))
+        XCTAssertTrue(loggedActions.contains("updateText(\"Middleware\")"))
+    }
+    
     func testCombineReducersRunsReducersInOrder() {
         let incrementReducer: Reducer<TestState> = { state, action in
             guard let action = action as? TestAction, case .increment = action else { return }
@@ -89,6 +138,40 @@ final class SwiftStateTests: XCTestCase {
         
         XCTAssertEqual(store.state.counter, 1)
         XCTAssertEqual(store.state.text, "count-1")
+    }
+    
+    func testCombineEffectReducersMergesReturnedEffects() async throws {
+        let firstReducer: EffectReducer<TestState> = { state, action in
+            guard let action = action as? TestAction, case .loadText = action else { return .none }
+            state.counter += 1
+            return .run { dispatch in
+                dispatch(TestAction.updateText("First"))
+            }
+        }
+        
+        let secondReducer: EffectReducer<TestState> = { state, action in
+            guard let action = action as? TestAction, case .loadText = action else { return .none }
+            state.counter += 1
+            return .run { dispatch in
+                dispatch(TestAction.increment)
+            }
+        }
+        
+        let stateReducer: EffectReducer<TestState> = { state, action in
+            testReducer(&state, action)
+            return .none
+        }
+        
+        let store = Store(
+            initialState: TestState(),
+            effectReducer: combineEffectReducers(firstReducer, secondReducer, stateReducer)
+        )
+        
+        store.dispatch(TestAction.loadText("Merged"))
+        try await Task.sleep(nanoseconds: 10_000_000)
+        
+        XCTAssertEqual(store.state.counter, 3)
+        XCTAssertEqual(store.state.text, "First")
     }
     
     func testPullbackUpdatesLocalState() {
@@ -289,5 +372,19 @@ final class SwiftStateTests: XCTestCase {
         XCTAssertEqual(store.history[0].text, "Current")
         XCTAssertFalse(store.canUndo)
         XCTAssertFalse(store.canRedo)
+    }
+    
+    func testTimeTravelStoreRecordsAsyncEffectResult() async throws {
+        let store = TimeTravelStore(initialState: TestState(), effectReducer: testEffectReducer)
+        
+        store.dispatch(TestAction.loadText("History"))
+        XCTAssertEqual(store.history.count, 1)
+        
+        try await Task.sleep(nanoseconds: 10_000_000)
+        
+        XCTAssertEqual(store.state.text, "History")
+        XCTAssertEqual(store.history.count, 2)
+        XCTAssertEqual(store.actionHistory.count, 1)
+        XCTAssertEqual(String(describing: store.actionHistory[0]), "updateText(\"History\")")
     }
 }

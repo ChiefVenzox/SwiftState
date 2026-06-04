@@ -11,6 +11,7 @@
 ## Key Features
 
 - 🏎️ **Modern Swift Concurrency**: Native thread-safety using `@MainActor` and Sendable types.
+- ⚡ **Async Effects**: Run API calls, persistence work, and other async operations from effect reducers.
 - 🕒 **Time Travel Engine**: Automatic history recording with full `undo()`, `redo()`, and manual scrubbing (jumping to any point in time).
 - 🧭 **Clean History Timeline**: Only records real state transitions, exposes combined state/action entries, and lets you reset history around the current state.
 - 🧩 **Composable Reducers**: Split app logic into focused reducers and compose them back into one store.
@@ -33,6 +34,8 @@ flowchart LR
         A[Action] --> M[Middlewares]
         M --> R[Reducer]
         R --> S[(State)]
+        R --> E[Effect]
+        E --> A
     end
 
     V -- "dispatch(action)" --> A
@@ -67,12 +70,17 @@ import SwiftState
 struct AppState: State {
     var counter: Int = 0
     var textInput: String = ""
+    var isLoading: Bool = false
+    var message: String?
 }
 
 enum AppAction: Action {
     case increment
     case decrement
     case changeText(String)
+    case loadMessage
+    case messageLoaded(String)
+    case messageFailed(String)
 }
 ```
 
@@ -90,6 +98,46 @@ let appReducer: Reducer<AppState> = { state, action in
         state.counter -= 1
     case .changeText(let newText):
         state.textInput = newText
+    case .loadMessage, .messageLoaded, .messageFailed:
+        break
+    }
+}
+```
+
+Use an `EffectReducer` when an action needs to start async work:
+
+```swift
+protocol MessageClient {
+    func fetchMessage() async throws -> String
+}
+
+let messageClient: MessageClient = LiveMessageClient()
+
+let appEffectReducer: EffectReducer<AppState> = { state, action in
+    guard let action = action as? AppAction else { return .none }
+    switch action {
+    case .loadMessage:
+        state.isLoading = true
+        state.message = nil
+        return .run { dispatch in
+            do {
+                let message = try await messageClient.fetchMessage()
+                await dispatch(AppAction.messageLoaded(message))
+            } catch {
+                await dispatch(AppAction.messageFailed(error.localizedDescription))
+            }
+        }
+    case .messageLoaded(let message):
+        state.isLoading = false
+        state.message = message
+        return .none
+    case .messageFailed(let message):
+        state.isLoading = false
+        state.message = message
+        return .none
+    default:
+        appReducer(&state, action)
+        return .none
     }
 }
 ```
@@ -116,7 +164,7 @@ struct MyApp: App {
     // Enable time travel tracking in debug mode with custom logging middleware
     @StateObject private var store = TimeTravelStore(
         initialState: AppState(),
-        reducer: appReducer,
+        effectReducer: appEffectReducer,
         middlewares: [createLoggerMiddleware()]
     )
     
@@ -201,6 +249,21 @@ let appReducer = combineReducers(
     pullback(settingsReducer, state: \.settings)
 )
 ```
+
+Effect reducers can be composed the same way:
+
+```swift
+let appEffectReducer = combineEffectReducers(
+    pullback(profileEffectReducer, state: \.profile),
+    pullback(settingsEffectReducer, state: \.settings)
+)
+```
+
+### `Effect`
+Represents asynchronous work that can dispatch actions back into the store.
+- `.none`: No asynchronous work.
+- `.run { dispatch in ... }`: Runs async work and dispatches follow-up actions.
+- `.merge(...)`: Runs multiple returned effects in order.
 
 ### `TimeTravelStore<S>`
 Extends `Store` to capture history entries.
