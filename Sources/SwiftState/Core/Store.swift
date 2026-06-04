@@ -74,16 +74,16 @@ private final class DispatchChain<S: State> {
             let middleware = middlewares[index]
             index += 1
             
-            let getState: @MainActor () -> S = { [weak store] in
-                store?.state ?? store!.state
+            let getState: @MainActor () -> S = {
+                store.state
             }
             
-            let dispatch: @MainActor (Action) -> Void = { [weak store] action in
-                store?.dispatch(action)
+            let dispatch: @MainActor (Action) -> Void = { action in
+                store.dispatch(action)
             }
             
-            let nextDispatch: @MainActor (Action) -> Void = { [weak self] action in
-                self?.next(action: action)
+            let nextDispatch: @MainActor (Action) -> Void = { [self] action in
+                next(action: action)
             }
             
             middleware(action, getState, dispatch, nextDispatch)

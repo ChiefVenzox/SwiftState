@@ -12,6 +12,7 @@
 
 - 🏎️ **Modern Swift Concurrency**: Native thread-safety using `@MainActor` and Sendable types.
 - 🕒 **Time Travel Engine**: Automatic history recording with full `undo()`, `redo()`, and manual scrubbing (jumping to any point in time).
+- 🧭 **Clean History Timeline**: Only records real state transitions, exposes combined state/action entries, and lets you reset history around the current state.
 - 🧬 **Flexible Middlewares**: Intercept actions before they reach reducers (e.g., logging, network synchronization).
 - 📺 **Glassmorphic SwiftUI Debugger**: A premium floating console with timeline scrubbing and live JSON state inspection that can be toggled on debug builds.
 - ⚙️ **Optimized Render Updates**: Only triggers SwiftUI view updates when the state changes (via `Equatable` checks).
@@ -171,9 +172,34 @@ Extends `Store` to capture history entries.
 - `undo()`: Steps back in time.
 - `redo()`: Steps forward in time.
 - `jump(to: Int)`: Jumps to a specific history state.
+- `clearHistory()`: Clears recorded history while keeping the current state as the new initial entry.
 - `history`: Array of all recorded states.
 - `actionHistory`: Array of actions leading to states.
+- `historyEntries`: Combined timeline entries with `index`, `state`, and optional `action`.
+- `maxHistoryLimit`: The state history cap. Values lower than `1` are safely clamped.
 - `canUndo` / `canRedo`: Control status flags.
+
+SwiftState records only actions that actually change the state, so ignored actions do not clutter the debugger timeline:
+
+```swift
+store.dispatch(AppAction.increment)   // recorded
+store.dispatch(AppAction.noop)        // not recorded if state stays equal
+
+for entry in store.historyEntries {
+    if entry.isInitialState {
+        print("Initial:", entry.state)
+    } else {
+        print("#\(entry.index)", entry.action!, entry.state)
+    }
+}
+```
+
+### `TimeTravelHistoryEntry<S>`
+Represents a readable timeline item.
+- `index`: The state position in the timeline.
+- `state`: The captured state at that position.
+- `action`: The action that produced the state, or `nil` for the initial state.
+- `isInitialState`: Convenience flag for the first entry.
 
 ### `createLoggerMiddleware()`
 A built-in middleware printing beautiful emojis, execution time, action name, and old/new state details to the console during development.

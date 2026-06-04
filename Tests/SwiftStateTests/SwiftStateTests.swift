@@ -12,6 +12,7 @@ enum TestAction: Action {
     case increment
     case decrement
     case updateText(String)
+    case noop
 }
 
 // MARK: - Reducer
@@ -25,6 +26,8 @@ let testReducer: Reducer<TestState> = { state, action in
         state.counter -= 1
     case .updateText(let newText):
         state.text = newText
+    case .noop:
+        break
     }
 }
 
@@ -72,6 +75,26 @@ final class SwiftStateTests: XCTestCase {
         XCTAssertEqual(store.state.counter, 1)
     }
     
+    func testMiddlewareCanResumeChainAfterDispatchReturns() {
+        var resume: (@MainActor (Action) -> Void)?
+        
+        let deferredMiddleware: Middleware<TestState> = { action, getState, dispatch, next in
+            resume = next
+        }
+        
+        let store = Store(
+            initialState: TestState(),
+            reducer: testReducer,
+            middlewares: [deferredMiddleware]
+        )
+        
+        store.dispatch(TestAction.increment)
+        XCTAssertEqual(store.state.counter, 0)
+        
+        resume?(TestAction.increment)
+        XCTAssertEqual(store.state.counter, 1)
+    }
+    
     func testTimeTravelStoreRecording() {
         let store = TimeTravelStore(initialState: TestState(), reducer: testReducer)
         
@@ -84,6 +107,16 @@ final class SwiftStateTests: XCTestCase {
         XCTAssertEqual(store.actionHistory.count, 1)
         XCTAssertEqual(store.currentHistoryIndex, 1)
         XCTAssertEqual(store.state.counter, 1)
+    }
+    
+    func testTimeTravelStoreDoesNotRecordUnchangedState() {
+        let store = TimeTravelStore(initialState: TestState(), reducer: testReducer)
+        
+        store.dispatch(TestAction.noop)
+        
+        XCTAssertEqual(store.history.count, 1)
+        XCTAssertEqual(store.actionHistory.count, 0)
+        XCTAssertEqual(store.currentHistoryIndex, 0)
     }
     
     func testTimeTravelUndoRedo() {
@@ -146,6 +179,17 @@ final class SwiftStateTests: XCTestCase {
         XCTAssertLessThanOrEqual(store.history.count, 3)
     }
     
+    func testTimeTravelHistoryLimitIsAtLeastOne() {
+        let store = TimeTravelStore(initialState: TestState(), reducer: testReducer, maxHistoryLimit: 0)
+        
+        store.dispatch(TestAction.increment)
+        
+        XCTAssertEqual(store.maxHistoryLimit, 1)
+        XCTAssertEqual(store.history.count, 1)
+        XCTAssertEqual(store.currentHistoryIndex, 0)
+        XCTAssertEqual(store.state.counter, 1)
+    }
+    
     func testTimeTravelHistoryBranching() {
         let store = TimeTravelStore(initialState: TestState(counter: 0), reducer: testReducer)
         
@@ -162,5 +206,38 @@ final class SwiftStateTests: XCTestCase {
         XCTAssertEqual(store.state.counter, 1)
         XCTAssertEqual(store.state.text, "Branched")
         XCTAssertFalse(store.canRedo) // Can't redo because we started a new branch/timeline
+    }
+    
+    func testTimeTravelHistoryEntriesPairStatesWithActions() {
+        let store = TimeTravelStore(initialState: TestState(), reducer: testReducer)
+        
+        store.dispatch(TestAction.increment)
+        store.dispatch(TestAction.updateText("Entry"))
+        
+        let entries = store.historyEntries
+        
+        XCTAssertEqual(entries.count, 3)
+        XCTAssertTrue(entries[0].isInitialState)
+        XCTAssertNil(entries[0].action)
+        XCTAssertEqual(entries[0].state.counter, 0)
+        XCTAssertEqual(entries[1].index, 1)
+        XCTAssertEqual(String(describing: entries[1].action!), "increment")
+        XCTAssertEqual(entries[2].state.text, "Entry")
+    }
+    
+    func testTimeTravelClearHistoryKeepsCurrentState() {
+        let store = TimeTravelStore(initialState: TestState(), reducer: testReducer)
+        
+        store.dispatch(TestAction.increment)
+        store.dispatch(TestAction.updateText("Current"))
+        store.clearHistory()
+        
+        XCTAssertEqual(store.history.count, 1)
+        XCTAssertEqual(store.actionHistory.count, 0)
+        XCTAssertEqual(store.currentHistoryIndex, 0)
+        XCTAssertEqual(store.history[0].counter, 1)
+        XCTAssertEqual(store.history[0].text, "Current")
+        XCTAssertFalse(store.canUndo)
+        XCTAssertFalse(store.canRedo)
     }
 }

@@ -1,6 +1,27 @@
 import Foundation
 import Combine
 
+/// A readable snapshot of a time-travel history item.
+public struct TimeTravelHistoryEntry<S: State>: Identifiable {
+    /// The position of this state in the recorded history.
+    public let index: Int
+    
+    /// The state captured at this history position.
+    public let state: S
+    
+    /// The action that produced this state. `nil` for the initial state.
+    public let action: Action?
+    
+    public init(index: Int, state: S, action: Action?) {
+        self.index = index
+        self.state = state
+        self.action = action
+    }
+    
+    public var id: Int { index }
+    public var isInitialState: Bool { action == nil }
+}
+
 /// A specialized `Store` that records state transitions and allows developers
 /// to traverse backward and forward in time.
 @MainActor
@@ -17,7 +38,8 @@ public final class TimeTravelStore<S: State>: Store<S> {
     /// The index of the active state in the history array.
     @Published public private(set) var currentHistoryIndex: Int = 0
     
-    private let maxHistoryLimit: Int
+    /// The maximum number of states kept in memory.
+    public let maxHistoryLimit: Int
     private var isTimeTraveling = false
     
     /// Initializes a new `TimeTravelStore`.
@@ -32,7 +54,7 @@ public final class TimeTravelStore<S: State>: Store<S> {
         middlewares: [Middleware<S>] = [],
         maxHistoryLimit: Int = 100
     ) {
-        self.maxHistoryLimit = maxHistoryLimit
+        self.maxHistoryLimit = max(1, maxHistoryLimit)
         self.history = [initialState]
         self.actionHistory = []
         self.currentHistoryIndex = 0
@@ -42,12 +64,35 @@ public final class TimeTravelStore<S: State>: Store<S> {
     
     /// Overrides dispatch to capture state transitions after actions are processed.
     public override func dispatch(_ action: Action) {
+        let previousState = self.state
+        
         super.dispatch(action)
         
         // Do not record transitions triggered by time travel scrubbing.
         if isTimeTraveling { return }
         
+        // Reducers can intentionally ignore actions. Keep the timeline focused on real changes.
+        if self.state == previousState { return }
+        
         recordNewState(self.state, action: action)
+    }
+    
+    /// A combined view of state history and the actions that produced each state.
+    public var historyEntries: [TimeTravelHistoryEntry<S>] {
+        history.enumerated().map { index, state in
+            TimeTravelHistoryEntry(
+                index: index,
+                state: state,
+                action: index == 0 ? nil : actionHistory[index - 1]
+            )
+        }
+    }
+    
+    /// Clears all previous history while keeping the current state as the new initial entry.
+    public func clearHistory() {
+        history = [state]
+        actionHistory = []
+        currentHistoryIndex = 0
     }
     
     /// Records a new state change in the history.
