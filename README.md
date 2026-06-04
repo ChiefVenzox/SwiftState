@@ -46,7 +46,7 @@ Add SwiftState to your project dependencies via Xcode or append it directly to y
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/your-username/SwiftState.git", from: "1.0.0")
+    .package(url: "https://github.com/ChiefVenzox/SwiftState.git", from: "1.0.0")
 ]
 ```
 
