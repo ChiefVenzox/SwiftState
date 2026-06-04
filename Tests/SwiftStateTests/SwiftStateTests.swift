@@ -8,6 +8,11 @@ struct TestState: State {
     var text: String = ""
 }
 
+struct ParentTestState: State {
+    var child: TestState = TestState()
+    var title: String = ""
+}
+
 enum TestAction: Action {
     case increment
     case decrement
@@ -53,6 +58,51 @@ final class SwiftStateTests: XCTestCase {
         
         store.dispatch(TestAction.decrement)
         XCTAssertEqual(store.state.counter, 0)
+    }
+    
+    func testStoreBindingDispatchesActions() {
+        let store = Store(initialState: TestState(), reducer: testReducer)
+        let textBinding = store.binding(\.text, action: TestAction.updateText)
+        
+        textBinding.wrappedValue = "Bound"
+        
+        XCTAssertEqual(store.state.text, "Bound")
+    }
+    
+    func testCombineReducersRunsReducersInOrder() {
+        let incrementReducer: Reducer<TestState> = { state, action in
+            guard let action = action as? TestAction, case .increment = action else { return }
+            state.counter += 1
+        }
+        
+        let textReducer: Reducer<TestState> = { state, action in
+            guard let action = action as? TestAction, case .increment = action else { return }
+            state.text = "count-\(state.counter)"
+        }
+        
+        let store = Store(
+            initialState: TestState(),
+            reducer: combineReducers(incrementReducer, textReducer)
+        )
+        
+        store.dispatch(TestAction.increment)
+        
+        XCTAssertEqual(store.state.counter, 1)
+        XCTAssertEqual(store.state.text, "count-1")
+    }
+    
+    func testPullbackUpdatesLocalState() {
+        let store = Store(
+            initialState: ParentTestState(),
+            reducer: pullback(testReducer, state: \.child)
+        )
+        
+        store.dispatch(TestAction.increment)
+        store.dispatch(TestAction.updateText("Child"))
+        
+        XCTAssertEqual(store.state.child.counter, 1)
+        XCTAssertEqual(store.state.child.text, "Child")
+        XCTAssertEqual(store.state.title, "")
     }
     
     func testMiddlewareChaining() {

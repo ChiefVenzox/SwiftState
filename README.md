@@ -13,6 +13,8 @@
 - 🏎️ **Modern Swift Concurrency**: Native thread-safety using `@MainActor` and Sendable types.
 - 🕒 **Time Travel Engine**: Automatic history recording with full `undo()`, `redo()`, and manual scrubbing (jumping to any point in time).
 - 🧭 **Clean History Timeline**: Only records real state transitions, exposes combined state/action entries, and lets you reset history around the current state.
+- 🧩 **Composable Reducers**: Split app logic into focused reducers and compose them back into one store.
+- 🪄 **SwiftUI Bindings**: Bind controls directly to state reads while dispatching actions on writes.
 - 🧬 **Flexible Middlewares**: Intercept actions before they reach reducers (e.g., logging, network synchronization).
 - 📺 **Glassmorphic SwiftUI Debugger**: A premium floating console with timeline scrubbing and live JSON state inspection that can be toggled on debug builds.
 - ⚙️ **Optimized Render Updates**: Only triggers SwiftUI view updates when the state changes (via `Equatable` checks).
@@ -92,6 +94,15 @@ let appReducer: Reducer<AppState> = { state, action in
 }
 ```
 
+For larger apps, keep reducers small and compose them:
+
+```swift
+let appReducer = combineReducers(
+    counterReducer,
+    formReducer
+)
+```
+
 ### 3. Initialize the Store
 
 For production, you can use the standard `Store`. For development, use `TimeTravelStore` to enable history tracking:
@@ -141,10 +152,10 @@ struct ContentView: View {
                     }
                 }
                 
-                TextField("Type something...", text: Binding(
-                    get: { store.state.textInput },
-                    set: { store.dispatch(AppAction.changeText($0)) }
-                ))
+                TextField(
+                    "Type something...",
+                    text: store.binding(\.textInput, action: AppAction.changeText)
+                )
                 .textFieldStyle(.roundedBorder)
                 .padding()
             }
@@ -166,6 +177,30 @@ struct ContentView: View {
 The base class managing the state.
 - `state`: The read-only state.
 - `dispatch(action)`: Dispatches an action.
+- `binding(_:action:)`: Creates a SwiftUI `Binding` that reads from state and dispatches an action when written.
+
+```swift
+Toggle(
+    "Notifications",
+    isOn: store.binding(\.notificationsEnabled, action: SettingsAction.setNotificationsEnabled)
+)
+```
+
+### Reducer Composition
+Use `combineReducers` to run focused reducers in order:
+
+```swift
+let reducer = combineReducers(profileReducer, settingsReducer, feedReducer)
+```
+
+Use `pullback` to lift a local reducer into parent state:
+
+```swift
+let appReducer = combineReducers(
+    pullback(profileReducer, state: \.profile),
+    pullback(settingsReducer, state: \.settings)
+)
+```
 
 ### `TimeTravelStore<S>`
 Extends `Store` to capture history entries.

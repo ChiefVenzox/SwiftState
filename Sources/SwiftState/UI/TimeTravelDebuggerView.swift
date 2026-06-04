@@ -278,10 +278,9 @@ public struct TimeTravelDebuggerView<S: State>: View {
                     .id(0)
                     
                     // List of Actions
-                    ForEach(0..<store.actionHistory.count, id: \.self) { index in
-                        let action = store.actionHistory[index]
-                        let actionName = String(describing: action)
-                        let stateIndex = index + 1
+                    ForEach(store.historyEntries.dropFirst()) { entry in
+                        let actionName = entry.action.map(String.init(describing:)) ?? "Unknown Action"
+                        let stateIndex = entry.index
                         let isActive = store.currentHistoryIndex == stateIndex
                         let isUndoneFuture = stateIndex > store.currentHistoryIndex
                         
@@ -367,6 +366,20 @@ public struct TimeTravelDebuggerView<S: State>: View {
                 )
             }
             .disabled(!store.canUndo)
+            
+            Button(action: { store.clearHistory() }) {
+                Image(systemName: "trash")
+                    .font(SwiftStateUI.Font.codeTitle)
+                    .frame(width: 42, height: 38)
+                    .background(store.history.count > 1 ? SwiftStateUI.Color.accentCyan.opacity(0.16) : Color.clear)
+                    .foregroundColor(store.history.count > 1 ? SwiftStateUI.Color.accentCyan : Color.gray.opacity(0.4))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(store.history.count > 1 ? SwiftStateUI.Color.accentCyan.opacity(0.35) : Color.gray.opacity(0.1), lineWidth: 1)
+                    )
+            }
+            .disabled(store.history.count <= 1)
+            .help("Clear history")
             
             Button(action: { store.redo() }) {
                 HStack {
