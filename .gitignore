@@ -1,0 +1,20 @@
+# Xcode
+#
+# Reference: https://gitlab.com/gitlab-org/gitlab-folly/-/blob/master/.gitignore-example
+
+# Build artifacts
+build/
+DerivedData/
+
+# OS X metadata
+.DS_Store
+
+# Xcode project files
+*.xcodeproj
+*.xcworkspace
+*.xcuserstate
+.swiftpm/
+.build/
+.build-mac/
+.build-linux/
+Package.resolved
