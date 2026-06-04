@@ -48,13 +48,24 @@ flowchart LR
 
 ### Swift Package Manager (SPM)
 
-Add SwiftState to your project dependencies via Xcode or append it directly to your `Package.swift` file:
+Add SwiftState to your project dependencies with Xcode:
+
+1. Open `File > Add Package Dependencies...`.
+2. Paste `https://github.com/ChiefVenzox/SwiftState.git`.
+3. Choose `Branch` and enter `main` to use the latest SwiftState APIs.
+4. Add the `SwiftState` product to your app target.
+
+For a full Xcode walkthrough, see [Documentation/XcodeIntegration.md](Documentation/XcodeIntegration.md).
+
+Or append it directly to your `Package.swift` file:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/ChiefVenzox/SwiftState.git", from: "1.0.0")
+    .package(url: "https://github.com/ChiefVenzox/SwiftState.git", branch: "main")
 ]
 ```
+
+To try a ready-to-paste SwiftUI starter, see [Examples/SwiftStateStarter](Examples/SwiftStateStarter).
 
 ---
 
