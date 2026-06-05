@@ -16,6 +16,7 @@
 - 🧭 **Clean History Timeline**: Only records real state transitions, exposes combined state/action entries, and lets you reset history around the current state.
 - 🧩 **Composable Reducers**: Split app logic into focused reducers and compose them back into one store.
 - 🪄 **SwiftUI Bindings**: Bind controls directly to state reads while dispatching actions on writes.
+- 🌐 **Optional Networking Module**: Add typed HTTP clients, retry, timeout, request lifecycle actions, and test mocks with `SwiftStateNetwork`.
 - 🧬 **Flexible Middlewares**: Intercept actions before they reach reducers (e.g., logging, network synchronization).
 - 📺 **Glassmorphic SwiftUI Debugger**: A premium floating console with timeline scrubbing and live JSON state inspection that can be toggled on debug builds.
 - ⚙️ **Optimized Render Updates**: Only triggers SwiftUI view updates when the state changes (via `Equatable` checks).
@@ -54,6 +55,7 @@ Add SwiftState to your project dependencies with Xcode:
 2. Paste `https://github.com/ChiefVenzox/SwiftState.git`.
 3. Choose `Branch` and enter `main` to use the latest SwiftState APIs.
 4. Add the `SwiftState` product to your app target.
+5. Add the `SwiftStateNetwork` product too if you want networking middleware.
 
 For a full Xcode walkthrough, see [Documentation/XcodeIntegration.md](Documentation/XcodeIntegration.md).
 
@@ -65,7 +67,212 @@ dependencies: [
 ]
 ```
 
+For networking, add both products to your target:
+
+```swift
+.target(
+    name: "YourApp",
+    dependencies: ["SwiftState", "SwiftStateNetwork"]
+)
+```
+
 To try a ready-to-paste SwiftUI starter, see [Examples/SwiftStateStarter](Examples/SwiftStateStarter).
+
+---
+
+## SwiftStateNetwork
+
+`SwiftStateNetwork` is an optional module that integrates async HTTP requests into SwiftState's `Action -> Middleware -> Reducer -> State` flow.
+
+```swift
+import SwiftState
+import SwiftStateNetwork
+```
+
+### Basic HTTP Usage
+
+Create a client with a base URL:
+
+```swift
+struct Profile: Codable, Equatable, Sendable {
+    let id: Int
+    let name: String
+}
+
+let client = URLSessionHTTPClient(
+    baseURL: URL(string: "https://api.example.com")!
+)
+
+let profile: Profile = try await client.get("/profile")
+```
+
+POST requests encode the body as JSON and decode the response:
+
+```swift
+struct CreateProfileBody: Encodable {
+    let name: String
+}
+
+let profile: Profile = try await client.post(
+    "/profile",
+    body: CreateProfileBody(name: "SwiftState")
+)
+```
+
+### Middleware Example
+
+Add network request tracking to your app state:
+
+```swift
+struct AppState: State {
+    var profile: Profile?
+    var networkRequests: [String: NetworkRequestState] = [:]
+    var errorMessage: String?
+}
+
+enum AppAction: Action {
+    case profileLoaded(Profile)
+    case profileFailed(String)
+}
+```
+
+Handle `NetworkAction` in your reducer:
+
+```swift
+let appReducer: Reducer<AppState> = { state, action in
+    switch action {
+    case let action as NetworkAction:
+        switch action {
+        case .requestStarted(let request):
+            state.networkRequests[request.id] = request
+        case .requestSucceeded(let id, _, let duration):
+            guard let current = state.networkRequests[id] else { return }
+            state.networkRequests[id] = NetworkRequestState(
+                id: current.id,
+                method: current.method,
+                path: current.path,
+                status: .succeeded,
+                startedAt: current.startedAt,
+                finishedAt: current.startedAt.addingTimeInterval(duration),
+                duration: duration
+            )
+        case .requestFailed(let id, let error, let duration):
+            guard let current = state.networkRequests[id] else { return }
+            state.networkRequests[id] = NetworkRequestState(
+                id: current.id,
+                method: current.method,
+                path: current.path,
+                status: .failed,
+                startedAt: current.startedAt,
+                finishedAt: current.startedAt.addingTimeInterval(duration),
+                duration: duration,
+                errorMessage: error
+            )
+        }
+    case let action as AppAction:
+        switch action {
+        case .profileLoaded(let profile):
+            state.profile = profile
+            state.errorMessage = nil
+        case .profileFailed(let message):
+            state.errorMessage = message
+        }
+    default:
+        break
+    }
+}
+```
+
+Install the middleware:
+
+```swift
+let client = URLSessionHTTPClient(
+    baseURL: URL(string: "https://api.example.com")!
+)
+
+@StateObject private var store = Store(
+    initialState: AppState(),
+    reducer: appReducer,
+    middlewares: [
+        createNetworkMiddleware(client: client),
+        createLoggerMiddleware()
+    ]
+)
+```
+
+Dispatch typed network requests from SwiftUI:
+
+```swift
+Button("Load Profile") {
+    store.dispatch(NetworkRequestAction<Profile>.get(
+        id: "load-profile",
+        "/profile",
+        retryPolicy: .times(2),
+        timeout: 10,
+        onSuccess: { AppAction.profileLoaded($0) },
+        onFailure: { AppAction.profileFailed($0) }
+    ))
+}
+```
+
+The middleware dispatches request lifecycle actions:
+
+```swift
+NetworkAction.requestStarted(...)
+NetworkAction.requestSucceeded(id:statusCode:duration:)
+NetworkAction.requestFailed(id:error:duration:)
+```
+
+### SwiftUI Example
+
+```swift
+struct ProfileView: View {
+    @EnvironmentObject var store: Store<AppState>
+
+    var body: some View {
+        VStack(spacing: 16) {
+            if let profile = store.state.profile {
+                Text(profile.name)
+            }
+
+            if let request = store.state.networkRequests["load-profile"],
+               request.status == .running {
+                ProgressView()
+            }
+
+            Button("Load Profile") {
+                store.dispatch(NetworkRequestAction<Profile>.get(
+                    id: "load-profile",
+                    "/profile",
+                    retryPolicy: .times(2),
+                    timeout: 10,
+                    onSuccess: { AppAction.profileLoaded($0) },
+                    onFailure: { AppAction.profileFailed($0) }
+                ))
+            }
+        }
+    }
+}
+```
+
+### Testing With MockHTTPClient
+
+```swift
+func testProfileRequest() async throws {
+    let client = MockHTTPClient()
+    try await client.enqueue(Profile(id: 1, name: "Test User"))
+
+    let profile: Profile = try await client.get("/profile")
+
+    XCTAssertEqual(profile.name, "Test User")
+
+    let requests = await client.requests
+    XCTAssertEqual(requests[0].path, "/profile")
+    XCTAssertEqual(requests[0].method, .get)
+}
+```
+
+`MockHTTPClient` is included in `SwiftStateNetwork`; no external test dependency is needed.
 
 ---
 

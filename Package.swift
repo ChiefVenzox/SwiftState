@@ -16,6 +16,9 @@ let package = Package(
         .library(
             name: "SwiftState",
             targets: ["SwiftState"]),
+        .library(
+            name: "SwiftStateNetwork",
+            targets: ["SwiftStateNetwork"]),
     ],
     dependencies: [
         // Dependencies declare other packages that this package depends on.
@@ -27,8 +30,14 @@ let package = Package(
         .target(
             name: "SwiftState",
             dependencies: []),
+        .target(
+            name: "SwiftStateNetwork",
+            dependencies: ["SwiftState"]),
         .testTarget(
             name: "SwiftStateTests",
             dependencies: ["SwiftState"]),
+        .testTarget(
+            name: "SwiftStateNetworkTests",
+            dependencies: ["SwiftState", "SwiftStateNetwork"]),
     ]
 )
