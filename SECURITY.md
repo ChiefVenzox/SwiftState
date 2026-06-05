@@ -1,21 +1,52 @@
 # Security Policy
 
+Thank you for helping keep SwiftState safe for the Swift and SwiftUI community.
+
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+SwiftState is currently maintained from the `main` branch while the package is being actively developed.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+| Version | Supported |
+| --- | --- |
+| `main` | Yes |
+| older release tags | Best effort |
 
-## Reporting a Vulnerability
+## Reporting A Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+Please do not open a public GitHub issue for security vulnerabilities.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+If you believe you have found a security issue, report it privately through GitHub Security Advisories when available, or contact the repository maintainer privately through GitHub.
+
+When reporting, please include:
+
+- A clear description of the issue
+- Steps to reproduce
+- Affected SwiftState version, branch, or commit
+- Example code or proof of concept, if possible
+- Any known impact or workaround
+
+## Response Expectations
+
+Maintainers will make a best-effort attempt to acknowledge valid reports within 72 hours.
+
+If the report is confirmed, the fix will be prepared privately when appropriate and published with a short security note.
+
+## Scope
+
+Security reports may include:
+
+- Unsafe state handling that could expose sensitive data
+- Incorrect debug tooling behavior that could leak application state
+- Supply-chain, package, or repository configuration issues
+- Vulnerabilities in example code that users may copy into apps
+
+Out-of-scope reports include:
+
+- General feature requests
+- Issues requiring a compromised developer machine
+- Vulnerabilities in dependencies or host applications outside SwiftState
+- Publicly disclosed issues without a private report first
+
+## Bounty Program
+
+SwiftState does not currently offer a paid bug bounty program.
