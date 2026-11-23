@@ -1,17 +1,17 @@
 import Foundation
 
 /// A unit of asynchronous work that can dispatch actions back into a store.
-public struct Effect {
-    public typealias Dispatch = @MainActor (Action) -> Void
+public struct Effect: Sendable {
+    public typealias Dispatch = @MainActor @Sendable (Action) -> Void
     
-    private let operation: ((@escaping Dispatch) async -> Void)?
+    private let operation: (@Sendable (@escaping Dispatch) async -> Void)?
     
     /// Creates an effect from an async operation.
-    public init(_ operation: @escaping (@escaping Dispatch) async -> Void) {
+    public init(_ operation: @escaping @Sendable (@escaping Dispatch) async -> Void) {
         self.operation = operation
     }
     
-    private init(operation: ((@escaping Dispatch) async -> Void)?) {
+    private init(operation: (@Sendable (@escaping Dispatch) async -> Void)?) {
         self.operation = operation
     }
     
@@ -21,7 +21,7 @@ public struct Effect {
     }
     
     /// Creates an effect from an async operation.
-    public static func run(_ operation: @escaping (@escaping Dispatch) async -> Void) -> Effect {
+    public static func run(_ operation: @escaping @Sendable (@escaping Dispatch) async -> Void) -> Effect {
         Effect(operation)
     }
     
@@ -32,8 +32,15 @@ public struct Effect {
     
     /// Runs multiple effects in order.
     public static func merge(_ effects: [Effect]) -> Effect {
-        Effect { dispatch in
-            for effect in effects {
+        let activeEffects = effects.compactMap { $0.operation != nil ? $0 : nil }
+        if activeEffects.isEmpty {
+            return .none
+        }
+        if activeEffects.count == 1 {
+            return activeEffects[0]
+        }
+        return Effect { dispatch in
+            for effect in activeEffects {
                 guard let operation = effect.operation else { continue }
                 await operation(dispatch)
             }

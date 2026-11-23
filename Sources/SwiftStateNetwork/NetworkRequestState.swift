@@ -38,7 +38,7 @@ public struct NetworkRequestState: State, Identifiable {
     }
 }
 
-public enum NetworkAction: Action {
+public enum NetworkAction: Action, Equatable {
     case requestStarted(NetworkRequestState)
     case requestSucceeded(id: String, statusCode: Int, duration: TimeInterval)
     case requestFailed(id: String, error: String, duration: TimeInterval)

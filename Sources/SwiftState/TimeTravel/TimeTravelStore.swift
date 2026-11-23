@@ -1,8 +1,10 @@
 import Foundation
+#if canImport(Combine)
 import Combine
+#endif
 
 /// A readable snapshot of a time-travel history item.
-public struct TimeTravelHistoryEntry<S: State>: Identifiable {
+public struct TimeTravelHistoryEntry<S: State>: Identifiable, Sendable {
     /// The position of this state in the recorded history.
     public let index: Int
     
@@ -27,6 +29,7 @@ public struct TimeTravelHistoryEntry<S: State>: Identifiable {
 @MainActor
 public final class TimeTravelStore<S: State>: Store<S> {
     
+    #if canImport(Combine)
     /// The recorded state history.
     @Published public private(set) var history: [S] = []
     
@@ -37,6 +40,18 @@ public final class TimeTravelStore<S: State>: Store<S> {
     
     /// The index of the active state in the history array.
     @Published public private(set) var currentHistoryIndex: Int = 0
+    #else
+    /// The recorded state history.
+    public private(set) var history: [S] = []
+    
+    /// The recorded actions that caused the state changes.
+    /// Note: `history[0]` represents the initial state, which has no corresponding action.
+    /// Therefore, `actionHistory[i]` is the action that transitioned the state from `history[i]` to `history[i+1]`.
+    public private(set) var actionHistory: [Action] = []
+    
+    /// The index of the active state in the history array.
+    public private(set) var currentHistoryIndex: Int = 0
+    #endif
     
     /// The maximum number of states kept in memory.
     public let maxHistoryLimit: Int

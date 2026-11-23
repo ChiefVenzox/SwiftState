@@ -1,3 +1,4 @@
+#if canImport(SwiftUI)
 import SwiftUI
 
 /// A premium, glassmorphic floating debugger panel for `TimeTravelStore`.
@@ -200,6 +201,7 @@ public struct TimeTravelDebuggerView<S: State>: View {
                 step: 1.0
             )
             .accentColor(SwiftStateUI.Color.accentCyan)
+            .disabled(store.history.count <= 1)
         }
         .padding(.horizontal, SwiftStateUI.Layout.padding)
         .padding(.vertical, 6)
@@ -414,3 +416,4 @@ public struct TimeTravelDebuggerView<S: State>: View {
         self.position = newPosition
     }
 }
+#endif

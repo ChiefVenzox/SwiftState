@@ -41,7 +41,7 @@ public actor MockHTTPClient: HTTPClientProtocol {
         queuedResults.append(.success(statusCode: statusCode, data: data))
     }
     
-    public func enqueueFailure(_ error: Error) {
+    public func enqueueFailure(_ error: any Error & Sendable) {
         queuedResults.append(.failure(error))
     }
     

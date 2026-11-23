@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(Combine)
 import Combine
+#endif
 
 /// A definition of Middleware typealias.
 /// Receives the dispatched action, a getter for the current state, a dispatch function for new actions,
@@ -14,6 +16,7 @@ public typealias Middleware<S: State> = @MainActor (
 /// The centralized Store that holds the application State.
 /// State mutations can only happen by dispatching Actions.
 /// The Store uses Reducers to calculate new States and invokes Middlewares for side effects.
+#if canImport(Combine)
 @MainActor
 open class Store<S: State>: ObservableObject {
     
@@ -64,6 +67,58 @@ open class Store<S: State>: ObservableObject {
         chain.execute(action: action)
     }
 }
+#else
+@MainActor
+open class Store<S: State> {
+    
+    /// The current state of the application. Read-only from outside.
+    public internal(set) var state: S
+    
+    private let middlewares: [Middleware<S>]
+    private let reducer: EffectReducer<S>
+    
+    /// Initializes a new Store with an initial state, a reducer, and optional middlewares.
+    /// - Parameters:
+    ///   - initialState: The starting state of the application.
+    ///   - reducer: The reducer function to apply action changes.
+    ///   - middlewares: An array of middlewares that run sequentially on dispatched actions.
+    public init(
+        initialState: S,
+        reducer: @escaping Reducer<S>,
+        middlewares: [Middleware<S>] = []
+    ) {
+        self.state = initialState
+        self.reducer = { state, action in
+            reducer(&state, action)
+            return .none
+        }
+        self.middlewares = middlewares
+    }
+    
+    /// Initializes a new Store with an initial state, an effect reducer, and optional middlewares.
+    /// - Parameters:
+    ///   - initialState: The starting state of the application.
+    ///   - effectReducer: The reducer function to apply action changes and return async work.
+    ///   - middlewares: An array of middlewares that run sequentially on dispatched actions.
+    public init(
+        initialState: S,
+        effectReducer: @escaping EffectReducer<S>,
+        middlewares: [Middleware<S>] = []
+    ) {
+        self.state = initialState
+        self.reducer = effectReducer
+        self.middlewares = middlewares
+    }
+    
+    /// Dispatches an action to the store, triggering the middleware chain and reducer.
+    /// Must be called from the main thread/actor.
+    /// - Parameter action: The action to dispatch.
+    public func dispatch(_ action: Action) {
+        let chain = DispatchChain(store: self, middlewares: middlewares, reducer: reducer)
+        chain.execute(action: action)
+    }
+}
+#endif
 
 /// Helper class to execute actions through the middleware chain in a linear manner.
 /// Avoids recursive escaping closure generation, resolving compiler SIL crashes.
@@ -72,7 +127,6 @@ private final class DispatchChain<S: State> {
     private let middlewares: [Middleware<S>]
     private let reducer: EffectReducer<S>
     private weak var store: Store<S>?
-    private var index = 0
     
     init(store: Store<S>, middlewares: [Middleware<S>], reducer: @escaping EffectReducer<S>) {
         self.store = store
@@ -81,16 +135,14 @@ private final class DispatchChain<S: State> {
     }
     
     func execute(action: Action) {
-        index = 0
-        next(action: action)
+        next(index: 0, action: action)
     }
     
-    private func next(action: Action) {
+    private func next(index: Int, action: Action) {
         guard let store = store else { return }
         
         if index < middlewares.count {
             let middleware = middlewares[index]
-            index += 1
             
             let getState: @MainActor () -> S = {
                 store.state
@@ -101,7 +153,7 @@ private final class DispatchChain<S: State> {
             }
             
             let nextDispatch: @MainActor (Action) -> Void = { [self] action in
-                next(action: action)
+                next(index: index + 1, action: action)
             }
             
             middleware(action, getState, dispatch, nextDispatch)
@@ -112,7 +164,9 @@ private final class DispatchChain<S: State> {
             if currentState != store.state {
                 store.state = currentState
             }
-            effect.start(dispatch: store.dispatch)
+            effect.start(dispatch: { [weak store] action in
+                store?.dispatch(action)
+            })
         }
     }
 }

@@ -1,3 +1,4 @@
+#if canImport(SwiftUI)
 import SwiftUI
 
 /// Styling and theme definitions for SwiftState UI components.
@@ -29,3 +30,4 @@ public enum SwiftStateUI {
         public static let borderSize: CGFloat = 1
     }
 }
+#endif

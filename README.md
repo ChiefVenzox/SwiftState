@@ -1,10 +1,13 @@
 # SwiftState 🚀
 
 [![Swift](https://img.shields.io/badge/Swift-5.7+-orange.svg?style=flat)](https://developer.apple.com/swift/)
-[![Platforms](https://img.shields.io/badge/Platforms-iOS%2015%2B%20%7C%20macOS%2012%2B%20%7C%20tvOS%2015%2B%20%7C%20watchOS%208%2B-blue.svg?style=flat)](https://developer.apple.com/discover/)
+[![Platforms](https://img.shields.io/badge/Platforms-iOS%2015%2B%20%7C%20macOS%2012%2B%20%7C%20tvOS%2015%2B%20%7C%20watchOS%208%2B%20%7C%20Linux-blue.svg?style=flat)](https://developer.apple.com/discover/)
+[![CI](https://github.com/ChiefVenzox/SwiftState/actions/workflows/swift.yml/badge.svg)](https://github.com/ChiefVenzox/SwiftState/actions/workflows/swift.yml)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat)](LICENSE)
 
 **SwiftState** is a lightweight, modern, and type-safe state management library for Swift and SwiftUI, built on modern Swift Concurrency features. It implements a predictable unidirectional data flow (Redux/MVI) and features a stunning, interactive **Time Travel Debugger Panel** that overlays directly onto your app.
+
+For full guides and architecture documentation, check out the [SwiftState Wiki](https://github.com/ChiefVenzox/SwiftState/wiki).
 
 ---
 

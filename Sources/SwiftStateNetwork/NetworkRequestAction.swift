@@ -12,7 +12,7 @@ public protocol AnyNetworkRequestAction: Action {
     func perform(using client: HTTPClientProtocol) async -> NetworkRequestResult
 }
 
-public struct NetworkRequestResult {
+public struct NetworkRequestResult: Sendable {
     public let statusCode: Int?
     public let errorMessage: String?
     public let followUpAction: Action?

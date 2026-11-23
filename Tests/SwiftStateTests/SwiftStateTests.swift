@@ -76,6 +76,7 @@ final class SwiftStateTests: XCTestCase {
         XCTAssertEqual(store.state.counter, 0)
     }
     
+    #if canImport(SwiftUI)
     func testStoreBindingDispatchesActions() {
         let store = Store(initialState: TestState(), reducer: testReducer)
         let textBinding = store.binding(\.text, action: TestAction.updateText)
@@ -84,6 +85,7 @@ final class SwiftStateTests: XCTestCase {
         
         XCTAssertEqual(store.state.text, "Bound")
     }
+    #endif
     
     func testEffectReducerDispatchesAsyncAction() async throws {
         let store = Store(initialState: TestState(), effectReducer: testEffectReducer)
@@ -145,7 +147,7 @@ final class SwiftStateTests: XCTestCase {
             guard let action = action as? TestAction, case .loadText = action else { return .none }
             state.counter += 1
             return .run { dispatch in
-                dispatch(TestAction.updateText("First"))
+                await dispatch(TestAction.updateText("First"))
             }
         }
         
@@ -153,7 +155,7 @@ final class SwiftStateTests: XCTestCase {
             guard let action = action as? TestAction, case .loadText = action else { return .none }
             state.counter += 1
             return .run { dispatch in
-                dispatch(TestAction.increment)
+                await dispatch(TestAction.increment)
             }
         }
         

@@ -97,6 +97,78 @@ final class SwiftStateNetworkTests: XCTestCase {
         XCTAssertNotNil(requests[0].body)
     }
     
+    func testRequestFailureExhaustsRetries() async throws {
+        let client = MockHTTPClient()
+        await client.enqueueFailure(HTTPClientError.httpStatus(500))
+        await client.enqueueFailure(HTTPClientError.httpStatus(500))
+        
+        let store = Store(
+            initialState: NetworkTestState(),
+            reducer: networkTestReducer,
+            middlewares: [createNetworkMiddleware(client: client)]
+        )
+        
+        store.dispatch(NetworkRequestAction<TestDTO>.get(
+            id: "failed-request",
+            "/always-fail",
+            retryPolicy: .times(1),
+            timeout: 5,
+            onSuccess: { NetworkTestAction.dtoLoaded($0) },
+            onFailure: { NetworkTestAction.dtoFailed($0) }
+        ))
+        
+        try await waitUntil {
+            store.state.errorMessage != nil
+        }
+        
+        let requests = await client.requests
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertNil(store.state.loadedDTO)
+        XCTAssertEqual(store.state.requests["failed-request"]?.status, .failed)
+        XCTAssertNotNil(store.state.requests["failed-request"]?.errorMessage)
+    }
+    
+    func testPostRequestWithMiddleware() async throws {
+        let client = MockHTTPClient()
+        try await client.enqueue(TestDTO(id: 4, name: "Created"))
+        
+        let store = Store(
+            initialState: NetworkTestState(),
+            reducer: networkTestReducer,
+            middlewares: [createNetworkMiddleware(client: client)]
+        )
+        
+        let postAction = try NetworkRequestAction<TestDTO>.post(
+            id: "post-request",
+            "/create",
+            body: TestBody(name: "NewItem"),
+            onSuccess: { NetworkTestAction.dtoLoaded($0) },
+            onFailure: { NetworkTestAction.dtoFailed($0) }
+        )
+        
+        store.dispatch(postAction)
+        
+        try await waitUntil {
+            store.state.loadedDTO != nil
+        }
+        
+        XCTAssertEqual(store.state.loadedDTO, TestDTO(id: 4, name: "Created"))
+        XCTAssertEqual(store.state.requests["post-request"]?.status, .succeeded)
+    }
+    
+    func testNetworkActionEquatable() {
+        let state1 = NetworkRequestState(
+            id: "1",
+            method: .get,
+            path: "/test",
+            status: .running,
+            startedAt: Date(timeIntervalSince1970: 0)
+        )
+        let action1 = NetworkAction.requestStarted(state1)
+        let action2 = NetworkAction.requestStarted(state1)
+        XCTAssertEqual(action1, action2)
+    }
+    
     private var networkTestReducer: Reducer<NetworkTestState> {
         { state, action in
             switch action {

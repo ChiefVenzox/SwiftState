@@ -1,3 +1,4 @@
+#if canImport(SwiftUI)
 import SwiftUI
 
 @MainActor
@@ -21,3 +22,4 @@ public extension Store {
         binding(get: { $0[keyPath: keyPath] }, action: action)
     }
 }
+#endif
