@@ -19,8 +19,9 @@ For full guides and architecture documentation, check out the [SwiftState Wiki](
 - 🧭 **Clean History Timeline**: Only records real state transitions, exposes combined state/action entries, and lets you reset history around the current state.
 - 🧩 **Composable Reducers**: Split app logic into focused reducers and compose them back into one store.
 - 🪄 **SwiftUI Bindings**: Bind controls directly to state reads while dispatching actions on writes.
+- 🤖 **Apple Intelligence & Foundation Models**: First-class support for Apple Foundation Models with prompts, streaming, token usage tracking, and test doubles via `SwiftStateFoundationModels`.
 - 🌐 **Optional Networking Module**: Add typed HTTP clients, retry, timeout, request lifecycle actions, and test mocks with `SwiftStateNetwork`.
-- 🧬 **Flexible Middlewares**: Intercept actions before they reach reducers (e.g., logging, network synchronization).
+- 🧬 **Flexible Middlewares**: Intercept actions before they reach reducers (e.g., logging, network synchronization, AI prompts).
 - 📺 **Glassmorphic SwiftUI Debugger**: A premium floating console with timeline scrubbing and live JSON state inspection that can be toggled on debug builds.
 - ⚙️ **Optimized Render Updates**: Only triggers SwiftUI view updates when the state changes (via `Equatable` checks).
 
@@ -58,7 +59,8 @@ Add SwiftState to your project dependencies with Xcode:
 2. Paste `https://github.com/ChiefVenzox/SwiftState.git`.
 3. Choose `Branch` and enter `main` to use the latest SwiftState APIs.
 4. Add the `SwiftState` product to your app target.
-5. Add the `SwiftStateNetwork` product too if you want networking middleware.
+5. Add `SwiftStateNetwork` if you need HTTP networking middleware.
+6. Add `SwiftStateFoundationModels` if you need Apple Intelligence & Foundation Models integration.
 
 For a full Xcode walkthrough, see [Documentation/XcodeIntegration.md](Documentation/XcodeIntegration.md).
 
@@ -70,12 +72,16 @@ dependencies: [
 ]
 ```
 
-For networking, add both products to your target:
+Add the desired products to your target dependencies:
 
 ```swift
 .target(
     name: "YourApp",
-    dependencies: ["SwiftState", "SwiftStateNetwork"]
+    dependencies: [
+        "SwiftState",
+        "SwiftStateNetwork",          // Optional: HTTP networking
+        "SwiftStateFoundationModels"  // Optional: Apple Foundation Models
+    ]
 )
 ```
 
@@ -276,6 +282,153 @@ func testProfileRequest() async throws {
 ```
 
 `MockHTTPClient` is included in `SwiftStateNetwork`; no external test dependency is needed.
+
+---
+
+## SwiftStateFoundationModels
+
+`SwiftStateFoundationModels` brings Apple's native **Foundation Models** framework (on-device Apple Intelligence and Private Cloud Compute models) directly into SwiftState's unidirectional state architecture.
+
+```swift
+import SwiftState
+import SwiftStateFoundationModels
+```
+
+### Overview
+
+- 🧠 **Native Apple Foundation Models**: Direct integration with `SystemLanguageModel` and `LanguageModelSession`.
+- ⚡ **Full Lifecycle Middleware**: Automatically tracks request states (`idle`, `generating`, `succeeded`, `failed`), request durations, and token usages.
+- 🌊 **Streaming Token Support**: Stream partial generation chunks straight into your state with `LanguageModelStreamAction`.
+- 🧪 **Testable Double**: Ships with `MockLanguageModelClient` to write deterministic unit tests on all platforms without requiring an Apple Intelligence-capable device or cloud connection.
+- 🛡️ **Cross-Platform Compatibility**: Uses `#if canImport(FoundationModels)` guards so your codebase compiles and tests smoothly across macOS, iOS, and Linux CI.
+
+### Setup and Store Integration
+
+Attach `createLanguageModelMiddleware` to your `Store`:
+
+```swift
+import SwiftUI
+import SwiftState
+import SwiftStateFoundationModels
+
+struct AppState: State {
+    var aiRequests: [String: LanguageModelRequestState] = [:]
+    var summary: String?
+    var streamedPoem: String = ""
+    var errorMessage: String?
+}
+
+enum AppAction: Action {
+    case summaryReceived(String)
+    case poemChunk(String)
+    case poemFinished(String)
+    case aiFailed(String)
+}
+
+let appReducer: Reducer<AppState> = { state, action in
+    // Process language model state updates automatically
+    languageModelReducer(state: &state.aiRequests, action: action)
+    
+    if let action = action as? AppAction {
+        switch action {
+        case .summaryReceived(let text):
+            state.summary = text
+            state.errorMessage = nil
+        case .poemChunk(let chunk):
+            state.streamedPoem.append(chunk)
+        case .poemFinished(let fullText):
+            state.streamedPoem = fullText
+        case .aiFailed(let error):
+            state.errorMessage = error
+        }
+    }
+}
+
+// In production, use SystemLanguageModelClient()
+let client = SystemLanguageModelClient()
+
+let store = Store(
+    initialState: AppState(),
+    reducer: appReducer,
+    middlewares: [
+        createLanguageModelMiddleware(client: client),
+        createLoggerMiddleware()
+    ]
+)
+```
+
+### Prompt Action
+
+Dispatch a prompt with optional system instructions and generation options:
+
+```swift
+Button("Summarize") {
+    store.dispatch(LanguageModelPromptAction(
+        id: "summary-1",
+        prompt: "Summarize this article in 3 bullet points.",
+        instructions: "You are a concise editorial assistant.",
+        options: LanguageModelGenerationOptions(temperature: 0.7),
+        onSuccess: { response in
+            AppAction.summaryReceived(response.text)
+        },
+        onFailure: { error in
+            AppAction.aiFailed(error)
+        }
+    ))
+}
+```
+
+### Streaming Token Generation
+
+Stream token chunks into your state in real-time as the on-device model generates:
+
+```swift
+Button("Write Poem") {
+    store.dispatch(LanguageModelStreamAction(
+        id: "poem-stream",
+        prompt: "Write a haiku about Swift.",
+        onChunk: { chunk in
+            AppAction.poemChunk(chunk)
+        },
+        onSuccess: { fullText in
+            AppAction.poemFinished(fullText)
+        },
+        onFailure: { error in
+            AppAction.aiFailed(error)
+        }
+    ))
+}
+```
+
+### Testing with `MockLanguageModelClient`
+
+Test your reducers, state transitions, and UI flows with `MockLanguageModelClient` without relying on hardware or runtime environment:
+
+```swift
+func testAIGeneration() async throws {
+    let client = MockLanguageModelClient()
+    await client.enqueueResponse(
+        "Swift is fast, safe, and expressive.",
+        usage: LanguageModelTokenUsage(inputTokens: 10, outputTokens: 8, totalTokens: 18)
+    )
+
+    let store = Store<AppState>(
+        initialState: AppState(),
+        reducer: appReducer,
+        middlewares: [createLanguageModelMiddleware(client: client)]
+    )
+
+    store.dispatch(LanguageModelPromptAction(
+        id: "test-ai",
+        prompt: "Describe Swift",
+        onSuccess: { AppAction.summaryReceived($0.text) }
+    ))
+
+    // Verify prompt was recorded
+    let prompts = await client.recordedPrompts
+    XCTAssertEqual(prompts, ["Describe Swift"])
+}
+```
 
 ---
 
