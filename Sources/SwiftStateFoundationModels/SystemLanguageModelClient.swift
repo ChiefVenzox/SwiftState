@@ -66,15 +66,9 @@ public final class SystemLanguageModelClient: LanguageModelClientProtocol, @unch
                     response = try await session.respond(to: prompt)
                 }
                 
-                let tokenUsage = LanguageModelTokenUsage(
-                    inputTokens: session.usage.promptTokenCount,
-                    outputTokens: session.usage.responseTokenCount,
-                    totalTokens: session.usage.totalTokenCount
-                )
-                
                 return LanguageModelResponse(
                     text: response.content,
-                    usage: tokenUsage
+                    usage: nil
                 )
             } catch let error as LanguageModelError {
                 throw error
@@ -128,15 +122,16 @@ public final class SystemLanguageModelClient: LanguageModelClientProtocol, @unch
                         
                         var lastSnapshot = ""
                         for try await snapshot in stream {
-                            if snapshot.hasPrefix(lastSnapshot) {
-                                let newChunk = String(snapshot.dropFirst(lastSnapshot.count))
+                            let currentContent = snapshot.content
+                            if currentContent.hasPrefix(lastSnapshot) {
+                                let newChunk = String(currentContent.dropFirst(lastSnapshot.count))
                                 if !newChunk.isEmpty {
                                     continuation.yield(newChunk)
                                 }
                             } else {
-                                continuation.yield(snapshot)
+                                continuation.yield(currentContent)
                             }
-                            lastSnapshot = snapshot
+                            lastSnapshot = currentContent
                         }
                         continuation.finish()
                     } catch {
